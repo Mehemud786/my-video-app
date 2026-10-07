@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
 
-app = FastAPI(title="Python Room Video Call App")
+app = FastAPI(title="Python Video Call App")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,25 +13,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory transient store for room exchange states
 rooms: Dict[str, Dict[str, Any]] = {}
 
-class SignalingPayload(BaseModel):
+class SignalPayload(BaseModel):
     room_id: str
+    type: str  # "offer", "answer", or "candidate"
     data: dict
 
-@app.post("/api/signal/set")
-def set_signal(payload: SignalingPayload):
-    rooms[payload.room_id] = payload.data
-    return {"status": "success", "room_id": payload.room_id}
+@app.post("/api/signal")
+def post_signal(payload: SignalPayload):
+    if payload.room_id not in rooms:
+        rooms[payload.room_id] = {"offer": None, "answer": None, "candidates": []}
 
-@app.get("/api/signal/get/{room_id}")
+    if payload.type == "offer":
+        rooms[payload.room_id]["offer"] = payload.data
+    elif payload.type == "answer":
+        rooms[payload.room_id]["answer"] = payload.data
+    elif payload.type == "candidate":
+        rooms[payload.room_id]["candidates"].append(payload.data)
+
+    return {"status": "success"}
+
+@app.get("/api/signal/{room_id}")
 def get_signal(room_id: str):
     if room_id not in rooms:
-        raise HTTPException(status_code=404, detail="Room not found or empty")
-    return {"room_id": room_id, "data": rooms[room_id]}
+        raise HTTPException(status_code=404, detail="Room not found")
+    return rooms[room_id]
 
-@app.delete("/api/signal/clear/{room_id}")
+@app.delete("/api/signal/{room_id}")
 def clear_signal(room_id: str):
     if room_id in rooms:
         del rooms[room_id]

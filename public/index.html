@@ -38,7 +38,7 @@
         <div class="panel">
             <h3>2. Join Room</h3>
             <input type="text" id="joinRoomInput" placeholder="Enter existing room code">
-            <button onclick="joinRoom()" style="background: #10b981;">Join Room</button>
+            <button onclick="startJoinProcess()" style="background: #10b981;">Join Room</button>
         </div>
     </div>
 
@@ -120,7 +120,7 @@
             }
         }
 
-        async function joinRoom() {
+        async function startJoinProcess() {
             const roomId = document.getElementById('joinRoomInput').value.trim();
             if (!roomId) {
                 alert('Please enter a valid room code to join.');
@@ -130,31 +130,34 @@
             isCaller = false;
 
             try {
-                const res = await fetch(`/api/signal/${roomId}`);
-                if (!res.ok) {
-                    alert('Room does not exist or has expired!');
-                    return;
-                }
-                const roomData = await res.json();
-                if (!roomData.offer) {
-                    alert('No host offer found in this room yet.');
-                    return;
-                }
-
                 await initMedia();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.offer));
+                alert('Searching for room... Please make sure the host has created it.');
+                
+                // Poll until the host's offer appears
+                pollTimer = setInterval(async () => {
+                    const res = await fetch(`/api/signal/${roomId}`);
+                    if (!res.ok) return;
+                    const roomData = await res.json();
 
-                if (roomData.candidates) {
-                    roomData.candidates.forEach(c => peerConnection.addIceCandidate(new RTCIceCandidate(c)));
-                }
+                    if (roomData.offer && !peerConnection.currentRemoteDescription) {
+                        clearInterval(pollTimer);
+                        
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.offer));
 
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                await sendSignal(roomId, 'answer', answer);
+                        if (roomData.candidates) {
+                            roomData.candidates.forEach(c => peerConnection.addIceCandidate(new RTCIceCandidate(c)));
+                        }
 
-                startPolling(roomId);
-                document.getElementById('hangupBtn').style.display = 'block';
-                alert('Joined room successfully!');
+                        const answer = await peerConnection.createAnswer();
+                        await peerConnection.setLocalDescription(answer);
+                        await sendSignal(roomId, 'answer', answer);
+
+                        startPolling(roomId);
+                        document.getElementById('hangupBtn').style.display = 'block';
+                        alert('Joined room successfully!');
+                    }
+                }, 2000);
+
             } catch (err) {
                 console.error('Error joining room:', err);
                 alert('Could not connect to the room.');

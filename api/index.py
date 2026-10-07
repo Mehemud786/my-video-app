@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
@@ -36,8 +36,9 @@ def post_signal(payload: SignalPayload):
 
 @app.get("/api/signal/{room_id}")
 def get_signal(room_id: str):
+    # Instead of throwing a 404 error, return a safe empty structure
     if room_id not in rooms:
-        raise HTTPException(status_code=404, detail="Room not found")
+        return {"offer": None, "answer": None, "candidates": []}
     return rooms[room_id]
 
 @app.delete("/api/signal/{room_id}")

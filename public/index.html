@@ -20,16 +20,14 @@
 
     <h1>Python + WebRTC Video Call</h1>
     <div class="controls">
-        <input type="text" id="roomInput" placeholder="Enter Room ID">
-        <button onclick="startCall()">Start Local Camera</button>
-        <button onclick="createOffer()">Create Offer (Caller)</button>
-        <button onclick="createAnswer()">Answer Call (Receiver)</button>
+        <button onclick="startCamera()">1. Start Camera</button>
+        <button onclick="createOffer()">2. Create Offer</button>
+        <button onclick="createAnswer()">3. Answer Call</button>
     </div>
 
-    <!-- Manual Signaling Area for P2P connection testing -->
-    <div style="margin-top: 15px; width: 80%; max-width: 900px; display: flex; gap: 10px;">
-        <textarea id="offerAnswerBox" placeholder="Paste SDP offer/answer here..." style="width: 100%; height: 80px; background: #1e293b; color: #fff; padding: 10px; border-radius: 5px; border: 1px solid #334155;"></textarea>
-        <button onclick="addAnswer()" style="height: 100px;">Set Remote SDP</button>
+    <div style="margin-top: 15px; width: 80%; max-width: 900px; display: flex; flex-direction: column; gap: 10px;">
+        <textarea id="offerAnswerBox" placeholder="Paste SDP offer/answer code here..." style="width: 100%; height: 80px; background: #1e293b; color: #fff; padding: 10px; border-radius: 5px; border: 1px solid #334155;"></textarea>
+        <button onclick="setRemoteDescription()" style="background: #10b981;">Set Remote SDP</button>
     </div>
 
     <div class="video-container">
@@ -55,11 +53,14 @@
             ]
         };
 
-        async function startCall() {
+        async function startCamera() {
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                document.getElementById('localVideo').srcObject = localStream;
                 
+                // Explicitly assign stream to local video element
+                const localVideo = document.getElementById('localVideo');
+                localVideo.srcObject = localStream;
+
                 peerConnection = new RTCPeerConnection(servers);
                 
                 // Add local tracks to peer connection
@@ -67,7 +68,7 @@
                     peerConnection.addTrack(track, localStream);
                 });
 
-                // Listen for remote tracks
+                // Set up remote stream listener
                 remoteStream = new MediaStream();
                 document.getElementById('remoteVideo').srcObject = remoteStream;
                 
@@ -77,57 +78,41 @@
                     });
                 };
 
-                // ICE candidates handling
-                peerConnection.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        console.log('New ICE candidate:', JSON.stringify(peerConnection.localDescription));
-                    }
-                };
-
-                alert('Camera active and PeerConnection initialized!');
+                alert('Camera successfully started and ready!');
             } catch (error) {
-                console.error('Error accessing media devices.', error);
-                alert('Could not access webcam/microphone.');
+                console.error('Media error:', error);
+                alert('Could not access camera. Check HTTPS or browser permissions.');
             }
         }
 
         async function createOffer() {
-            if (!peerConnection) {
-                alert('Start local camera first!');
-                return;
-            }
+            if (!peerConnection) return alert('Start camera first!');
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
             document.getElementById('offerAnswerBox').value = JSON.stringify(peerConnection.localDescription);
-            alert('Offer created! Copy the text above and send it to the other participant.');
+            alert('Offer created! Copy and send to the other user.');
         }
 
         async function createAnswer() {
-            if (!peerConnection) {
-                alert('Start local camera first!');
-                return;
-            }
+            if (!peerConnection) return alert('Start camera first!');
             const text = document.getElementById('offerAnswerBox').value;
-            if (!text) {
-                alert('Paste the sender offer first!');
-                return;
-            }
-            const offer = JSON.parse(text);
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            if (!text) return alert('Paste offer text first!');
             
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(text)));
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
             document.getElementById('offerAnswerBox').value = JSON.stringify(peerConnection.localDescription);
-            alert('Answer created! Copy the text above and send it back to the caller.');
+            alert('Answer created! Copy and send back to the caller.');
         }
 
-        async function addAnswer() {
+        async function setRemoteDescription() {
+            if (!peerConnection) return alert('Start camera first!');
             const text = document.getElementById('offerAnswerBox').value;
-            if (!text) return;
-            const description = JSON.parse(text);
+            if (!text) return alert('Paste SDP text first!');
+            
             if (!peerConnection.currentRemoteDescription) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
-                alert('Remote description set successfully!');
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(text)));
+                alert('Remote description successfully set!');
             }
         }
     </script>

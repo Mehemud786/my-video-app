@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Direct Video Call App</title>
+    <title>Room-based Video Call</title>
     <style>
         body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { margin-bottom: 10px; }
         .video-container { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
         video { width: 450px; height: 340px; background: #1e293b; border-radius: 8px; object-fit: cover; border: 2px solid #334155; }
         .controls { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
@@ -18,16 +17,10 @@
 </head>
 <body>
 
-    <h1>Python + WebRTC Video Call</h1>
+    <h1>Room-based Video Call App</h1>
     <div class="controls">
-        <button onclick="startCamera()">1. Start Camera</button>
-        <button onclick="createOffer()">2. Create Offer</button>
-        <button onclick="createAnswer()">3. Answer Call</button>
-    </div>
-
-    <div style="margin-top: 15px; width: 80%; max-width: 900px; display: flex; flex-direction: column; gap: 10px;">
-        <textarea id="offerAnswerBox" placeholder="Paste SDP offer/answer code here..." style="width: 100%; height: 80px; background: #1e293b; color: #fff; padding: 10px; border-radius: 5px; border: 1px solid #334155;"></textarea>
-        <button onclick="setRemoteDescription()" style="background: #10b981;">Set Remote SDP</button>
+        <input type="text" id="roomInput" placeholder="Enter Room ID">
+        <button onclick="joinRoom()">Join Room & Connect</button>
     </div>
 
     <div class="video-container">
@@ -53,67 +46,86 @@
             ]
         };
 
-        async function startCamera() {
+        async function joinRoom() {
+            const roomId = document.getElementById('roomInput').value.trim();
+            if (!roomId) {
+                alert('Please enter a valid Room ID');
+                return;
+            }
+
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                
-                // Explicitly assign stream to local video element
-                const localVideo = document.getElementById('localVideo');
-                localVideo.srcObject = localStream;
+                document.getElementById('localVideo').srcObject = localStream;
 
                 peerConnection = new RTCPeerConnection(servers);
                 
-                // Add local tracks to peer connection
                 localStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, localStream);
                 });
 
-                // Set up remote stream listener
                 remoteStream = new MediaStream();
                 document.getElementById('remoteVideo').srcObject = remoteStream;
-                
+
                 peerConnection.ontrack = (event) => {
                     event.streams[0].getTracks().forEach(track => {
                         remoteStream.addTrack(track);
                     });
                 };
 
-                alert('Camera successfully started and ready!');
+                peerConnection.onicecandidate = async (event) => {
+                    if (event.candidate) {
+                        // Push updated description containing candidates
+                        await sendSignal(roomId, { type: peerConnection.localDescription.type, sdp: peerConnection.localDescription.sdp });
+                    }
+                };
+
+                // Check if room already has an offer (Caller vs Receiver check)
+                const response = await fetch(`/api/signal/get/${roomId}`);
+                if (response.ok) {
+                    // Room exists, we are the Answerer
+                    const data = await response.json();
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.data));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    await sendSignal(roomId, { type: answer.type, sdp: answer.sdp });
+                    alert('Connected to room as Answerer!');
+                } else {
+                    // Room does not exist, we are the Caller
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    await sendSignal(roomId, { type: offer.type, sdp: offer.sdp });
+                    alert('Room created! Waiting for peer to join...');
+
+                    // Poll for answer
+                    pollForAnswer(roomId);
+                }
+
             } catch (error) {
-                console.error('Media error:', error);
-                alert('Could not access camera. Check HTTPS or browser permissions.');
+                console.error('Connection error:', error);
+                alert('Error establishing connection.');
             }
         }
 
-        async function createOffer() {
-            if (!peerConnection) return alert('Start camera first!');
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            document.getElementById('offerAnswerBox').value = JSON.stringify(peerConnection.localDescription);
-            alert('Offer created! Copy and send to the other user.');
+        async function sendSignal(roomId, data) {
+            await fetch('/api/signal/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ room_id: roomId, data: data })
+            });
         }
 
-        async function createAnswer() {
-            if (!peerConnection) return alert('Start camera first!');
-            const text = document.getElementById('offerAnswerBox').value;
-            if (!text) return alert('Paste offer text first!');
-            
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(text)));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            document.getElementById('offerAnswerBox').value = JSON.stringify(peerConnection.localDescription);
-            alert('Answer created! Copy and send back to the caller.');
-        }
-
-        async function setRemoteDescription() {
-            if (!peerConnection) return alert('Start camera first!');
-            const text = document.getElementById('offerAnswerBox').value;
-            if (!text) return alert('Paste SDP text first!');
-            
-            if (!peerConnection.currentRemoteDescription) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(JSON.parse(text)));
-                alert('Remote description successfully set!');
-            }
+        function pollForAnswer(roomId) {
+            const interval = setInterval(async () => {
+                const response = await fetch(`/api/signal/get/${roomId}`);
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.data.type === 'answer' && !peerConnection.currentRemoteDescription) {
+                        await peerConnection.setRemoteDescription(new RTCSessionDescription(result.data));
+                        clearInterval(interval);
+                        alert('Peer joined and connected successfully!');
+                    }
+                }
+            }, 2000);
         }
     </script>
 </body>

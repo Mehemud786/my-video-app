@@ -1,10 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Dict, Any
 
 app = FastAPI(title="Python Video Call App")
 
-# Enable CORS for safety
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,13 +13,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class RoomRequest(BaseModel):
+# In-memory store for room signaling data (Note: resets on serverless cold starts)
+rooms: Dict[str, Dict[str, Any]] = {}
+
+class SignalingData(BaseModel):
     room_id: str
+    data: dict
 
-@app.get("/api/health")
-def health_check():
-    return {"status": "healthy", "message": "Backend is running on Vercel"}
+@app.post("/api/signal/set")
+def set_signal(payload: SignalingData):
+    rooms[payload.room_id] = payload.data
+    return {"status": "success", "room_id": payload.room_id}
 
-@app.post("/api/room")
-def create_room(data: RoomRequest):
-    return {"room_id": data.room_id, "status": "active"}
+@app.get("/api/signal/get/{room_id}")
+def get_signal(room_id: str):
+    if room_id not in rooms:
+        raise HTTPException(status_code=404, detail="Room not found or empty")
+    return {"room_id": room_id, "data": rooms[room_id]}
+
+@app.delete("/api/signal/clear/{room_id}")
+def clear_signal(room_id: str):
+    if room_id in rooms:
+        del rooms[room_id]
+    return {"status": "cleared"}

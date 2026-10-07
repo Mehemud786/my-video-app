@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
 
-app = FastAPI(title="Python Video Call App")
+app = FastAPI(title="Python Room Video Call App")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,15 +13,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory store for room signaling data (Note: resets on serverless cold starts)
+# In-memory transient store for room exchange states
 rooms: Dict[str, Dict[str, Any]] = {}
 
-class SignalingData(BaseModel):
+class SignalingPayload(BaseModel):
     room_id: str
     data: dict
 
 @app.post("/api/signal/set")
-def set_signal(payload: SignalingData):
+def set_signal(payload: SignalingPayload):
     rooms[payload.room_id] = payload.data
     return {"status": "success", "room_id": payload.room_id}
 

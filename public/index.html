@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python + Vercel Video Call</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin-top: 50px; background: #f4f4f9; }
+        button { padding: 10px 20px; font-size: 16px; background: #0070f3; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #005bb5; }
+    </style>
+</head>
+<body>
+    <h1>Direct Video Call App</h1>
+    <p>Powered by Python (FastAPI) and Vercel</p>
+    <button onclick="startCall()">Join Video Room</button>
+
+    <script>
+        async function startCall() {
+            const response = await fetch('/api/room-token');
+            const data = await response.json();
+            alert("Connecting to room: " + data.room_id);
+            // Insert your WebRTC or video embed logic here
+        }
+    </script>
+</body>
+</html>

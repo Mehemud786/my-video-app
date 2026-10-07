@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any
 
-app = FastAPI(title="Python Video Call App")
+app = FastAPI(title="Python Serverless Video Call")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,6 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# In-memory transient store for room exchange states
 rooms: Dict[str, Dict[str, Any]] = {}
 
 class SignalPayload(BaseModel):
@@ -36,7 +37,7 @@ def post_signal(payload: SignalPayload):
 
 @app.get("/api/signal/{room_id}")
 def get_signal(room_id: str):
-    # Instead of throwing a 404 error, return a safe empty structure
+    # Safely return empty template if the host hasn't created the room yet
     if room_id not in rooms:
         return {"offer": None, "answer": None, "candidates": []}
     return rooms[room_id]

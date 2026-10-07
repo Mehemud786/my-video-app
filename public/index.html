@@ -3,63 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Call - Create or Join Room</title>
+    <title>WebRTC Python Video Call</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { margin-bottom: 5px; }
-        p { color: #94a3b8; margin-top: 0; }
-        .panels-container { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 900px; }
-        .panel { background: #1e293b; border: 1px solid #334155; padding: 20px; border-radius: 8px; flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 10px; }
-        .panel h3 { margin-top: 0; color: #38bdf8; }
-        .video-container { display: flex; gap: 20px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
-        video { width: 420px; height: 320px; background: #1e293b; border-radius: 8px; object-fit: cover; border: 2px solid #334155; }
-        input, button { padding: 10px 15px; font-size: 16px; border-radius: 5px; border: none; }
+        body { font-family: system-ui, sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
+        .controls { display: flex; gap: 1rem; margin: 2rem 0; flex-wrap: wrap; justify-content: center; }
+        .panel { background: #1e293b; padding: 1.5rem; border-radius: 8px; border: 1px solid #334155; }
+        .video-grid { display: flex; gap: 2rem; flex-wrap: wrap; justify-content: center; }
+        video { width: 400px; height: 300px; background: #000; border-radius: 8px; object-fit: cover; border: 2px solid #475569; }
+        input, button { padding: 0.75rem 1rem; font-size: 1rem; border-radius: 6px; border: none; }
         input { background: #0f172a; color: #fff; border: 1px solid #475569; }
-        button { background: #3b82f6; color: #fff; cursor: pointer; }
+        button { background: #3b82f6; color: #fff; cursor: pointer; font-weight: bold; }
         button:hover { background: #2563eb; }
-        .hangup-btn { background: #ef4444; margin-top: 20px; width: 200px; }
-        .hangup-btn:hover { background: #dc2626; }
+        .btn-join { background: #10b981; }
+        .btn-join:hover { background: #059669; }
+        .btn-hangup { background: #ef4444; display: none; margin-top: 1rem; width: 100%; max-width: 300px; }
     </style>
 </head>
 <body>
 
-    <h1>Python WebRTC Video Call</h1>
-    <p>Create a new room or join an existing room code.</p>
+    <h1>Direct Video Call</h1>
 
-    <div class="panels-container">
-        <!-- Section 1: Create Room -->
+    <div class="controls">
         <div class="panel">
-            <h3>1. Create Room</h3>
-            <input type="text" id="createRoomInput" placeholder="Enter new room code">
-            <button onclick="createRoom()">Create & Host</button>
+            <h3>1. Host a Call</h3>
+            <input type="text" id="createRoomInput" placeholder="Enter new room name">
+            <button onclick="createRoom()">Create Room</button>
         </div>
-
-        <!-- Section 2: Join Room -->
         <div class="panel">
-            <h3>2. Join Room</h3>
-            <input type="text" id="joinRoomInput" placeholder="Enter existing room code">
-            <button onclick="startJoinProcess()" style="background: #10b981;">Join Room</button>
+            <h3>2. Join a Call</h3>
+            <input type="text" id="joinRoomInput" placeholder="Enter existing room name">
+            <button class="btn-join" onclick="joinRoom()">Join Room</button>
         </div>
     </div>
 
-    <button class="hangup-btn" onclick="hangUp()" style="display:none;" id="hangupBtn">Leave Call</button>
+    <button class="btn-hangup" id="hangupBtn" onclick="hangUp()">End Call</button>
 
-    <div class="video-container">
+    <div class="video-grid">
         <div>
-            <h4>Local Stream</h4>
+            <h4>You</h4>
             <video id="localVideo" autoplay muted playsinline></video>
         </div>
         <div>
-            <h4>Remote Stream</h4>
+            <h4>Peer</h4>
             <video id="remoteVideo" autoplay playsinline></video>
         </div>
     </div>
 
     <script>
-        let localStream;
-        let remoteStream;
-        let peerConnection;
-        let pollTimer;
+        let localStream, remoteStream, peerConnection, pollTimer;
         let activeRoomId = null;
         let isCaller = false;
 
@@ -75,18 +66,13 @@
             document.getElementById('localVideo').srcObject = localStream;
 
             peerConnection = new RTCPeerConnection(servers);
-
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
             remoteStream = new MediaStream();
             document.getElementById('remoteVideo').srcObject = remoteStream;
 
             peerConnection.ontrack = (event) => {
-                event.streams[0].getTracks().forEach(track => {
-                    remoteStream.addTrack(track);
-                });
+                event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
             };
 
             peerConnection.onicecandidate = (event) => {
@@ -98,70 +84,49 @@
 
         async function createRoom() {
             const roomId = document.getElementById('createRoomInput').value.trim();
-            if (!roomId) {
-                alert('Please enter a valid room code to create.');
-                return;
-            }
+            if (!roomId) return alert('Enter a room name first.');
+            
             activeRoomId = roomId;
             isCaller = true;
 
-            try {
-                await initMedia();
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                await sendSignal(roomId, 'offer', offer);
+            await initMedia();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            await sendSignal(roomId, 'offer', offer);
 
-                startPolling(roomId);
-                document.getElementById('hangupBtn').style.display = 'block';
-                alert('Room created successfully! Waiting for a peer to join...');
-            } catch (err) {
-                console.error('Error creating room:', err);
-                alert('Could not initialize camera or create room.');
-            }
+            startPolling(roomId);
+            document.getElementById('hangupBtn').style.display = 'block';
+            alert(`Room '${roomId}' created. Waiting for peer...`);
         }
 
-        async function startJoinProcess() {
+        async function joinRoom() {
             const roomId = document.getElementById('joinRoomInput').value.trim();
-            if (!roomId) {
-                alert('Please enter a valid room code to join.');
-                return;
-            }
+            if (!roomId) return alert('Enter a room name first.');
+            
             activeRoomId = roomId;
             isCaller = false;
 
-            try {
-                await initMedia();
-                alert('Searching for room... Please make sure the host has created it.');
-                
-                // Poll until the host's offer appears
-                pollTimer = setInterval(async () => {
-                    const res = await fetch(`/api/signal/${roomId}`);
-                    if (!res.ok) return;
-                    const roomData = await res.json();
+            await initMedia();
+            document.getElementById('hangupBtn').style.display = 'block';
+            
+            // Poll until the host creates the offer
+            pollTimer = setInterval(async () => {
+                const res = await fetch(`/api/signal/${roomId}`);
+                const roomData = await res.json();
 
-                    if (roomData.offer && !peerConnection.currentRemoteDescription) {
-                        clearInterval(pollTimer);
-                        
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.offer));
+                if (roomData.offer && !peerConnection.currentRemoteDescription) {
+                    clearInterval(pollTimer);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.offer));
 
-                        if (roomData.candidates) {
-                            roomData.candidates.forEach(c => peerConnection.addIceCandidate(new RTCIceCandidate(c)));
-                        }
+                    roomData.candidates.forEach(c => peerConnection.addIceCandidate(new RTCIceCandidate(c)));
 
-                        const answer = await peerConnection.createAnswer();
-                        await peerConnection.setLocalDescription(answer);
-                        await sendSignal(roomId, 'answer', answer);
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    await sendSignal(roomId, 'answer', answer);
 
-                        startPolling(roomId);
-                        document.getElementById('hangupBtn').style.display = 'block';
-                        alert('Joined room successfully!');
-                    }
-                }, 2000);
-
-            } catch (err) {
-                console.error('Error joining room:', err);
-                alert('Could not connect to the room.');
-            }
+                    startPolling(roomId); // Poll for new ICE candidates
+                }
+            }, 2000);
         }
 
         async function sendSignal(roomId, type, data) {
@@ -174,30 +139,25 @@
 
         function startPolling(roomId) {
             pollTimer = setInterval(async () => {
-                try {
-                    const res = await fetch(`/api/signal/${roomId}`);
-                    if (!res.ok) return;
-                    const roomData = await res.json();
+                const res = await fetch(`/api/signal/${roomId}`);
+                if (!res.ok) return;
+                const roomData = await res.json();
 
-                    if (isCaller && roomData.answer && !peerConnection.currentRemoteDescription) {
-                        await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.answer));
-                    }
+                if (isCaller && roomData.answer && !peerConnection.currentRemoteDescription) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(roomData.answer));
+                }
 
-                    if (roomData.candidates) {
-                        for (let c of roomData.candidates) {
-                            try {
-                                await peerConnection.addIceCandidate(new RTCIceCandidate(c));
-                            } catch (e) {}
-                        }
-                    }
-                } catch (e) {}
+                if (roomData.candidates) {
+                    roomData.candidates.forEach(async (c) => {
+                        try { await peerConnection.addIceCandidate(new RTCIceCandidate(c)); } 
+                        catch (e) { /* Ignore duplicate candidates */ }
+                    });
+                }
             }, 2000);
         }
 
         async function hangUp() {
-            if (activeRoomId) {
-                await fetch(`/api/signal/${activeRoomId}`, { method: 'DELETE' });
-            }
+            if (activeRoomId) await fetch(`/api/signal/${activeRoomId}`, { method: 'DELETE' });
             if (localStream) localStream.getTracks().forEach(t => t.stop());
             if (peerConnection) peerConnection.close();
             if (pollTimer) clearInterval(pollTimer);

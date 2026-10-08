@@ -4,80 +4,222 @@
   <meta charset="UTF-8">
   <title>P2P Video Call</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-  <style>
-    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; background: #0f172a; color: white; }
-    .video-grid { display: flex; gap: 20px; margin-top: 20px; }
-    video { width: 360px; height: 270px; background: #1e293b; border-radius: 8px; object-fit: cover; }
-    .controls { display: flex; gap: 10px; margin-top: 15px; }
-    button, input { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; }
-    button { background: #3b82f6; color: white; cursor: pointer; }
-    button:hover { background: #2563eb; }
-  </style>
+<style>
+  body { 
+    font-family: sans-serif; display: flex; flex-direction: column; 
+    align-items: center; padding: 20px; background: #0f172a; color: white; margin: 0;
+  }
+  .controls { display: flex; gap: 10px; margin: 15px 0; z-index: 20; }
+  button, input { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; }
+  button { background: #3b82f6; color: white; cursor: pointer; }
+  
+  /* 9:16 Portrait Container */
+  .video-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 360px; /* Adjust size as needed */
+    aspect-ratio: 9 / 16;
+    background: #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    transition: transform 0.3s ease;
+  }
+
+  /* Remote Video (Background) */
+  #remote-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* Prevents stretching */
+  }
+
+  /* Local Video (Picture-in-Picture) */
+  #local-video {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 28%;
+    aspect-ratio: 9 / 16;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    transform: scaleX(-1); /* Mirrors the local camera */
+    z-index: 10;
+  }
+
+  /* Zoomed State */
+  .video-wrapper.zoomed {
+    transform: scale(1.3);
+    z-index: 50;
+  }
+  .media-controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 15px;
+    z-index: 20;
+  }
+  .media-controls button {
+    background: #475569; /* Slightly darker gray to distinguish from Call button */
+  }
+  .media-controls button:hover {
+    background: #334155;
+  }
+  .btn-danger {
+    background: #ef4444 !important; /* Red color when disabled */
+  }
+</style>
 </head>
 <body>
   <h2>Direct Video Call</h2>
   <div>Your ID: <span id="my-id" style="font-weight:bold; color: #38bdf8;">Connecting...</span></div>
 
-  <div class="controls">
-    <input type="text" id="peer-id" placeholder="Enter remote peer ID">
-    <button onclick="makeCall()">Call</button>
+  <div class="media-controls">
+    <button id="btn-mic" onclick="toggleMic()">🎤 Mic On</button>
+    <button id="btn-vid" onclick="toggleVideo()">📷 Cam On</button>
+    <button id="btn-flip" onclick="flipCamera()">🔄 Flip Cam</button>
   </div>
 
-  <div class="video-grid">
-    <div>
-      <p>Local Video</p>
-      <video id="local-video" autoplay muted playsinline></video>
-    </div>
-    <div>
-      <p>Remote Video</p>
-      <video id="remote-video" autoplay playsinline></video>
-    </div>
+<div class="video-wrapper" id="video-container">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay muted playsinline></video>
   </div>
 
   <script>
    let localStream;
-    // 1. Generate a random 4-digit ID (between 1000 and 9999)
-    function generate4DigitID() {
-      return Math.floor(1000 + Math.random() * 9000).toString();
-    }
-    // 2. Initialize PeerJS with the custom 4-digit ID
-    const myId = generate4DigitID();
-    const peer = new Peer(myId);
-    // 3. Acquire Local Camera and Mic
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-// ... rest of the code remains exactly the same
+let activeCall = null; // Tracks the current active call
+let currentFacingMode = "user"; // Tracks front vs back camera
+let isAudioMuted = false;
+let isVideoMuted = false;
 
-    // 1. Acquire Local Camera and Mic
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        localStream = stream;
-        document.getElementById('local-video').srcObject = stream;
-      })
-      .catch(err => console.error("Error accessing camera/mic:", err));
+// 1. Generate 4-Digit ID
+function generate4DigitID() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
-    // 2. Display assigned Peer ID
-    peer.on('open', id => {
-      document.getElementById('my-id').innerText = id;
+const myId = generate4DigitID();
+const peer = new Peer(myId);
+
+// 2. Initialize Media
+async function initMedia() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
+      audio: true
     });
+    document.getElementById('local-video').srcObject = localStream;
+  } catch (err) {
+    console.error("Error accessing camera/mic:", err);
+  }
+}
+initMedia();
 
-    // 3. Handle Incoming Call
-    peer.on('call', call => {
-      call.answer(localStream);
-      call.on('stream', remoteStream => {
-        document.getElementById('remote-video').srcObject = remoteStream;
-      });
+// 3. Setup PeerJS Listeners
+peer.on('open', id => document.getElementById('my-id').innerText = id);
+
+peer.on('call', call => {
+  activeCall = call; // Save active call
+  call.answer(localStream);
+  call.on('stream', remoteStream => {
+    document.getElementById('remote-video').srcObject = remoteStream;
+  });
+});
+
+function makeCall() {
+  const remoteId = document.getElementById('peer-id').value;
+  if (!remoteId) return alert("Please enter a Peer ID");
+  
+  activeCall = peer.call(remoteId, localStream); // Save active call
+  activeCall.on('stream', remoteStream => {
+    document.getElementById('remote-video').srcObject = remoteStream;
+  });
+}
+
+// --- NEW MEDIA CONTROL FUNCTIONS --- //
+
+function toggleMic() {
+  if (!localStream) return;
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (audioTrack) {
+    audioTrack.enabled = !audioTrack.enabled;
+    isAudioMuted = !audioTrack.enabled;
+    
+    const btn = document.getElementById('btn-mic');
+    btn.innerText = isAudioMuted ? "🔇 Mic Off" : "🎤 Mic On";
+    btn.classList.toggle('btn-danger', isAudioMuted);
+  }
+}
+
+function toggleVideo() {
+  if (!localStream) return;
+  const videoTrack = localStream.getVideoTracks()[0];
+  if (videoTrack) {
+    videoTrack.enabled = !videoTrack.enabled;
+    isVideoMuted = !videoTrack.enabled;
+    
+    const btn = document.getElementById('btn-vid');
+    btn.innerText = isVideoMuted ? "🚫 Cam Off" : "📷 Cam On";
+    btn.classList.toggle('btn-danger', isVideoMuted);
+  }
+}
+
+async function flipCamera() {
+  if (!localStream) return;
+  
+  // Swap facing mode
+  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+  
+  // Stop the old video track to release the hardware
+  const oldVideoTrack = localStream.getVideoTracks()[0];
+  if (oldVideoTrack) oldVideoTrack.stop();
+  
+  try {
+    // Request just the new video stream
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
+      audio: false
     });
-
-    // 4. Initiate Outgoing Call
-    function makeCall() {
-      const remoteId = document.getElementById('peer-id').value;
-      if (!remoteId) return alert("Please enter a Peer ID");
-      
-      const call = peer.call(remoteId, localStream);
-      call.on('stream', remoteStream => {
-        document.getElementById('remote-video').srcObject = remoteStream;
-      });
+    
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    
+    // Swap the tracks in the local stream
+    localStream.removeTrack(oldVideoTrack);
+    localStream.addTrack(newVideoTrack);
+    
+    // Maintain the user's current camera mute state
+    newVideoTrack.enabled = !isVideoMuted;
+    
+    // Update the local video preview
+    const localVideoEl = document.getElementById('local-video');
+    localVideoEl.srcObject = localStream;
+    
+    // Remove mirroring when using the back camera
+    localVideoEl.style.transform = currentFacingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+    
+    // CRITICAL: Replace the track in the active WebRTC connection so the remote peer sees the new camera
+    if (activeCall && activeCall.peerConnection) {
+      const sender = activeCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender) {
+        sender.replaceTrack(newVideoTrack);
+      }
     }
+  } catch (err) {
+    console.error("Error flipping camera:", err);
+    alert("Could not switch camera. Ensure your device has multiple cameras.");
+  }
+}
+
+// Zoom Logic from previous step
+const videoContainer = document.getElementById('video-container');
+let lastTap = 0;
+videoContainer.addEventListener('click', (e) => {
+  const currentTime = new Date().getTime();
+  if (currentTime - lastTap < 300 && currentTime - lastTap > 0) {
+    videoContainer.classList.toggle('zoomed');
+    e.preventDefault();
+  }
+  lastTap = currentTime;
+});
   </script>
 </body>
 </html>

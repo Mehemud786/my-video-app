@@ -35,8 +35,17 @@
   </div>
 
   <script>
-    let localStream;
-    const peer = new Peer();
+   let localStream;
+    // 1. Generate a random 4-digit ID (between 1000 and 9999)
+    function generate4DigitID() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+    // 2. Initialize PeerJS with the custom 4-digit ID
+    const myId = generate4DigitID();
+    const peer = new Peer(myId);
+    // 3. Acquire Local Camera and Mic
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+// ... rest of the code remains exactly the same
 
     // 1. Acquire Local Camera and Mic
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -47,17 +56,9 @@
       .catch(err => console.error("Error accessing camera/mic:", err));
 
     // 2. Display assigned Peer ID
-    let localStream;
-    
-    // Generate a random 4-digit string (between 1000 and 9999)
-    const myFourDigitId = Math.floor(1000 + Math.random() * 9000).toString();
-    
-    // Initialize PeerJS with the custom 4-digit ID
-    const peer = new Peer(myFourDigitId);
-
-    // 1. Acquire Local Camera and Mic
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-// ... rest of the code remains exactly the same
+    peer.on('open', id => {
+      document.getElementById('my-id').innerText = id;
+    });
 
     // 3. Handle Incoming Call
     peer.on('call', call => {

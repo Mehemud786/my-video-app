@@ -6,14 +6,6 @@
   <title>Mobile P2P Video Call</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   <style>
-    :root {
-      /* Dynamic CSS variables for video filters */
-      --v-bright: 100%;
-      --v-contrast: 100%;
-      --v-warmth: 0%;
-      --v-saturate: 100%;
-    }
-
     body { 
       font-family: sans-serif; 
       display: flex; 
@@ -27,7 +19,7 @@
     
     .controls { display: flex; gap: 10px; margin: 15px 0 20px 0; z-index: 20; }
     
-    input[type="number"] { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; width: 150px; text-align: center; }
+    input { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; width: 150px; text-align: center; }
     .btn-call { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; background: #3b82f6; color: white; cursor: pointer; font-weight: bold; }
     .btn-call:hover { background: #2563eb; }
     
@@ -45,21 +37,17 @@
       cursor: zoom-in;
     }
 
-    /* Video Elements with Dynamic Filters applied */
-    video {
-      filter: brightness(var(--v-bright)) contrast(var(--v-contrast)) sepia(var(--v-warmth)) saturate(var(--v-saturate));
-      transition: filter 0.1s ease;
-    }
-
+    /* Remote Video (Background) */
     #remote-video {
       width: 100%;
       height: 100%;
       object-fit: cover;
     }
 
+    /* Local Video (Picture-in-Picture) */
     #local-video {
       position: absolute;
-      top: 20px;
+      top: 20px; /* Moved to top to avoid bottom buttons */
       right: 20px;
       width: 28%;
       aspect-ratio: 9 / 16;
@@ -71,33 +59,12 @@
       z-index: 10;
     }
 
+    /* Zoomed State */
     .video-wrapper.zoomed {
       transform: scale(1.3);
       z-index: 50;
       cursor: zoom-out;
     }
-
-    /* FILTER PANEL OVERLAY */
-    .filter-panel {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      background: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(8px);
-      padding: 12px;
-      border-radius: 10px;
-      display: none; /* Hidden by default */
-      flex-direction: column;
-      gap: 12px;
-      z-index: 40;
-      width: 140px;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-    
-    .filter-panel.show { display: flex; }
-    .filter-group { display: flex; flex-direction: column; gap: 4px; }
-    .filter-group label { font-size: 11px; font-weight: bold; color: #94a3b8; text-transform: uppercase; }
-    .filter-group input[type="range"] { width: 100%; cursor: pointer; }
 
     /* INNER MEDIA CONTROLS OVERLAY */
     .media-controls { 
@@ -107,13 +74,13 @@
       width: 100%;
       display: flex; 
       justify-content: center;
-      gap: 15px; 
+      gap: 20px; 
       z-index: 30; 
     }
     
     .media-btn { 
-      width: 46px; 
-      height: 46px; 
+      width: 50px; 
+      height: 50px; 
       border-radius: 50%; 
       border: none;
       background: rgba(15, 23, 42, 0.7); 
@@ -126,13 +93,17 @@
       transition: all 0.2s;
     }
     .media-btn:hover { background: rgba(30, 41, 59, 0.9); transform: scale(1.05); }
-    .media-btn.muted { background: #ef4444; }
+    
+    /* State Styling: When button has .muted class */
+    .media-btn.muted { background: #ef4444; } /* Red color */
     .media-btn.muted:hover { background: #dc2626; }
     
+    /* SVG toggling logic */
     .icon-off { display: none; }
     .muted .icon-on { display: none; }
     .muted .icon-off { display: block; }
-    svg { width: 22px; height: 22px; fill: currentColor; }
+
+    svg { width: 24px; height: 24px; fill: currentColor; }
   </style>
 </head>
 <body>
@@ -140,7 +111,7 @@
   <div>Your ID: <span id="my-id" style="font-weight:bold; color: #38bdf8; font-size: 1.2rem;">Generating...</span></div>
 
   <div class="controls">
-    <input type="number" id="peer-id" placeholder="4-Digit ID">
+    <input type="number" id="peer-id" placeholder="4-Digit Peer ID">
     <button class="btn-call" onclick="makeCall()">Call</button>
   </div>
 
@@ -148,35 +119,8 @@
     <video id="remote-video" autoplay playsinline></video>
     <video id="local-video" autoplay muted playsinline></video>
 
-    <!-- FLOATING FILTER PANEL -->
-    <div class="filter-panel" id="filter-panel" onclick="event.stopPropagation()">
-      <div class="filter-group">
-        <label>Brightness</label>
-        <input type="range" id="sl-bright" min="50" max="150" value="100" oninput="updateFilters()">
-      </div>
-      <div class="filter-group">
-        <label>Contrast</label>
-        <input type="range" id="sl-contrast" min="50" max="150" value="100" oninput="updateFilters()">
-      </div>
-      <div class="filter-group">
-        <label>Color Saturation</label>
-        <input type="range" id="sl-saturate" min="0" max="200" value="100" oninput="updateFilters()">
-      </div>
-      <div class="filter-group">
-        <label>Warmth (White Bal)</label>
-        <input type="range" id="sl-warmth" min="0" max="100" value="0" oninput="updateFilters()">
-      </div>
-    </div>
-
-    <!-- MEDIA CONTROLS -->
+    <!-- MEDIA CONTROLS (Now inside the video wrapper) -->
     <div class="media-controls">
-      <!-- Filter Toggle Button -->
-      <button class="media-btn" onclick="toggleFilters(); event.stopPropagation();">
-        <svg viewBox="0 0 24 24">
-          <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/>
-        </svg>
-      </button>
-
       <!-- Microphone Button -->
       <button id="btn-mic" class="media-btn" onclick="toggleMic(); event.stopPropagation();">
         <svg class="icon-on" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
@@ -203,115 +147,117 @@
     let isAudioMuted = false;
     let isVideoMuted = false;
 
-    // 1. Generate ID & Setup Peer
-    function generate4DigitID() { return Math.floor(1000 + Math.random() * 9000).toString(); }
+    // 1. Generate 4-Digit ID & Initialize PeerJS
+    function generate4DigitID() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+    
     const myId = generate4DigitID();
     const peer = new Peer(myId);
 
-    // 2. Initialize Media
+    // 2. Initialize Camera and Microphone
     async function initMedia() {
       try {
         localStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: true 
+          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } }, 
+          audio: true 
         });
         document.getElementById('local-video').srcObject = localStream;
-      } catch (err) { alert("Camera permissions required."); }
+      } catch (err) {
+        console.error("Error accessing camera/mic:", err);
+        alert("Please grant camera and microphone permissions.");
+      }
     }
     initMedia();
 
-    // 3. WebRTC Logic
-    peer.on('open', id => document.getElementById('my-id').innerText = id);
+    // 3. Setup WebRTC Listeners
+    peer.on('open', id => {
+      document.getElementById('my-id').innerText = id;
+    });
 
     peer.on('call', call => {
       activeCall = call;
       call.answer(localStream);
-      call.on('stream', remoteStream => document.getElementById('remote-video').srcObject = remoteStream);
+      call.on('stream', remoteStream => {
+        document.getElementById('remote-video').srcObject = remoteStream;
+      });
     });
 
     function makeCall() {
       const remoteId = document.getElementById('peer-id').value;
-      if (!remoteId) return alert("Enter Peer ID");
+      if (!remoteId || remoteId.length !== 4) return alert("Please enter a valid 4-digit Peer ID");
       
       activeCall = peer.call(remoteId, localStream);
-      activeCall.on('stream', remoteStream => document.getElementById('remote-video').srcObject = remoteStream);
+      activeCall.on('stream', remoteStream => {
+        document.getElementById('remote-video').srcObject = remoteStream;
+      });
     }
 
-    // 4. Video Filters (Brightness, Contrast, Saturation, Warmth)
-    function toggleFilters() {
-      document.getElementById('filter-panel').classList.toggle('show');
-    }
-
-    function updateFilters() {
-      const b = document.getElementById('sl-bright').value;
-      const c = document.getElementById('sl-contrast').value;
-      const s = document.getElementById('sl-saturate').value;
-      const w = document.getElementById('sl-warmth').value;
-      
-      const root = document.documentElement;
-      root.style.setProperty('--v-bright', b + '%');
-      root.style.setProperty('--v-contrast', c + '%');
-      root.style.setProperty('--v-saturate', s + '%');
-      root.style.setProperty('--v-warmth', w + '%');
-    }
-
-    // 5. Hardware Controls
+    // 4. Media Controls
     function toggleMic() {
       if (!localStream) return;
-      const track = localStream.getAudioTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        isAudioMuted = !track.enabled;
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        isAudioMuted = !audioTrack.enabled;
+        
+        // Toggle the .muted class (CSS handles the SVG swap and red color)
         document.getElementById('btn-mic').classList.toggle('muted', isAudioMuted);
       }
     }
 
     function toggleVideo() {
       if (!localStream) return;
-      const track = localStream.getVideoTracks()[0];
-      if (track) {
-        track.enabled = !track.enabled;
-        isVideoMuted = !track.enabled;
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        isVideoMuted = !videoTrack.enabled;
+        
+        // Toggle the .muted class
         document.getElementById('btn-vid').classList.toggle('muted', isVideoMuted);
       }
     }
 
     async function flipCamera() {
       if (!localStream) return;
+      
       currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
-      const oldTrack = localStream.getVideoTracks()[0];
-      if (oldTrack) oldTrack.stop();
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+      if (oldVideoTrack) oldVideoTrack.stop();
 
       try {
         const newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } }, audio: false
+          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
+          audio: false
         });
-        const newTrack = newStream.getVideoTracks()[0];
-        localStream.removeTrack(oldTrack);
-        localStream.addTrack(newTrack);
-        newTrack.enabled = !isVideoMuted;
 
-        const videoEl = document.getElementById('local-video');
-        videoEl.srcObject = localStream;
-        videoEl.style.transform = currentFacingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        localStream.removeTrack(oldVideoTrack);
+        localStream.addTrack(newVideoTrack);
+        
+        newVideoTrack.enabled = !isVideoMuted;
+
+        const localVideoEl = document.getElementById('local-video');
+        localVideoEl.srcObject = localStream;
+        localVideoEl.style.transform = currentFacingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
 
         if (activeCall && activeCall.peerConnection) {
-          const sender = activeCall.peerConnection.getSenders().find(s => s.track.kind === 'video');
-          if (sender) sender.replaceTrack(newTrack);
+          const sender = activeCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(newVideoTrack);
         }
-      } catch (err) {}
+      } catch (err) {
+        console.error("Error flipping camera:", err);
+      }
     }
 
-    // 6. Zoom & Close Panel on tap
+    // 5. Double-Tap to Zoom
     const videoContainer = document.getElementById('video-container');
     let lastTap = 0;
     
     videoContainer.addEventListener('click', (e) => {
-      // Hide filter panel if clicking outside of it
-      document.getElementById('filter-panel').classList.remove('show');
-
-      // Double-Tap to Zoom Logic
       const currentTime = new Date().getTime();
       const tapLength = currentTime - lastTap;
+      
       if (tapLength < 300 && tapLength > 0) {
         videoContainer.classList.toggle('zoomed');
         e.preventDefault();

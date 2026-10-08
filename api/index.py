@@ -1,4 +1,4 @@
-import uuid
+import random
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,6 +13,6 @@ app.add_middleware(
 
 @app.get("/api/room")
 def create_room():
-    # Generate a unique room/call ID
-    room_id = str(uuid.uuid4())[:8]
+    # Generate a random 4-digit ID as a string
+    room_id = str(random.randint(1000, 9999))
     return {"roomId": room_id}

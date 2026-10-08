@@ -47,9 +47,17 @@
       .catch(err => console.error("Error accessing camera/mic:", err));
 
     // 2. Display assigned Peer ID
-    peer.on('open', id => {
-      document.getElementById('my-id').innerText = id;
-    });
+    let localStream;
+    
+    // Generate a random 4-digit string (between 1000 and 9999)
+    const myFourDigitId = Math.floor(1000 + Math.random() * 9000).toString();
+    
+    // Initialize PeerJS with the custom 4-digit ID
+    const peer = new Peer(myFourDigitId);
+
+    // 1. Acquire Local Camera and Mic
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+// ... rest of the code remains exactly the same
 
     // 3. Handle Incoming Call
     peer.on('call', call => {

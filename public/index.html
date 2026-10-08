@@ -2,224 +2,268 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>P2P Video Call</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mobile P2P Video Call</title>
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
-<style>
-  body { 
-    font-family: sans-serif; display: flex; flex-direction: column; 
-    align-items: center; padding: 20px; background: #0f172a; color: white; margin: 0;
-  }
-  .controls { display: flex; gap: 10px; margin: 15px 0; z-index: 20; }
-  button, input { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; }
-  button { background: #3b82f6; color: white; cursor: pointer; }
-  
-  /* 9:16 Portrait Container */
-  .video-wrapper {
-    position: relative;
-    width: 100%;
-    max-width: 360px; /* Adjust size as needed */
-    aspect-ratio: 9 / 16;
-    background: #1e293b;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-    transition: transform 0.3s ease;
-  }
+  <style>
+    body { 
+      font-family: sans-serif; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+      padding: 20px; 
+      background: #0f172a; 
+      color: white; 
+      margin: 0;
+    }
+    
+    .controls { display: flex; gap: 10px; margin: 15px 0 20px 0; z-index: 20; }
+    
+    input { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; width: 150px; text-align: center; }
+    .btn-call { padding: 8px 14px; border-radius: 6px; border: none; font-size: 14px; background: #3b82f6; color: white; cursor: pointer; font-weight: bold; }
+    .btn-call:hover { background: #2563eb; }
+    
+    /* 9:16 Portrait Container */
+    .video-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      aspect-ratio: 9 / 16;
+      background: #1e293b;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      transition: transform 0.3s ease;
+      cursor: zoom-in;
+    }
 
-  /* Remote Video (Background) */
-  #remote-video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover; /* Prevents stretching */
-  }
+    /* Remote Video (Background) */
+    #remote-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
 
-  /* Local Video (Picture-in-Picture) */
-  #local-video {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    width: 28%;
-    aspect-ratio: 9 / 16;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 2px solid rgba(255, 255, 255, 0.8);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    transform: scaleX(-1); /* Mirrors the local camera */
-    z-index: 10;
-  }
+    /* Local Video (Picture-in-Picture) */
+    #local-video {
+      position: absolute;
+      top: 20px; /* Moved to top to avoid bottom buttons */
+      right: 20px;
+      width: 28%;
+      aspect-ratio: 9 / 16;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.8);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transform: scaleX(-1);
+      z-index: 10;
+    }
 
-  /* Zoomed State */
-  .video-wrapper.zoomed {
-    transform: scale(1.3);
-    z-index: 50;
-  }
-  .media-controls {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 15px;
-    z-index: 20;
-  }
-  .media-controls button {
-    background: #475569; /* Slightly darker gray to distinguish from Call button */
-  }
-  .media-controls button:hover {
-    background: #334155;
-  }
-  .btn-danger {
-    background: #ef4444 !important; /* Red color when disabled */
-  }
-</style>
+    /* Zoomed State */
+    .video-wrapper.zoomed {
+      transform: scale(1.3);
+      z-index: 50;
+      cursor: zoom-out;
+    }
+
+    /* INNER MEDIA CONTROLS OVERLAY */
+    .media-controls { 
+      position: absolute;
+      bottom: 25px;
+      left: 0;
+      width: 100%;
+      display: flex; 
+      justify-content: center;
+      gap: 20px; 
+      z-index: 30; 
+    }
+    
+    .media-btn { 
+      width: 50px; 
+      height: 50px; 
+      border-radius: 50%; 
+      border: none;
+      background: rgba(15, 23, 42, 0.7); 
+      backdrop-filter: blur(4px);
+      color: white; 
+      cursor: pointer; 
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .media-btn:hover { background: rgba(30, 41, 59, 0.9); transform: scale(1.05); }
+    
+    /* State Styling: When button has .muted class */
+    .media-btn.muted { background: #ef4444; } /* Red color */
+    .media-btn.muted:hover { background: #dc2626; }
+    
+    /* SVG toggling logic */
+    .icon-off { display: none; }
+    .muted .icon-on { display: none; }
+    .muted .icon-off { display: block; }
+
+    svg { width: 24px; height: 24px; fill: currentColor; }
+  </style>
 </head>
 <body>
-  <h2>Direct Video Call</h2>
-  <div>Your ID: <span id="my-id" style="font-weight:bold; color: #38bdf8;">Connecting...</span></div>
+  <h2>Secure Video Call</h2>
+  <div>Your ID: <span id="my-id" style="font-weight:bold; color: #38bdf8; font-size: 1.2rem;">Generating...</span></div>
 
-  <div class="media-controls">
-    <button id="btn-mic" onclick="toggleMic()">🎤 Mic On</button>
-    <button id="btn-vid" onclick="toggleVideo()">📷 Cam On</button>
-    <button id="btn-flip" onclick="flipCamera()">🔄 Flip Cam</button>
+  <div class="controls">
+    <input type="number" id="peer-id" placeholder="4-Digit Peer ID">
+    <button class="btn-call" onclick="makeCall()">Call</button>
   </div>
 
-<div class="video-wrapper" id="video-container">
+  <div class="video-wrapper" id="video-container">
     <video id="remote-video" autoplay playsinline></video>
     <video id="local-video" autoplay muted playsinline></video>
+
+    <!-- MEDIA CONTROLS (Now inside the video wrapper) -->
+    <div class="media-controls">
+      <!-- Microphone Button -->
+      <button id="btn-mic" class="media-btn" onclick="toggleMic(); event.stopPropagation();">
+        <svg class="icon-on" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        <svg class="icon-off" viewBox="0 0 24 24"><path d="M19 11h-2c0 .91-.26 1.75-.69 2.48l1.46 1.46A6.921 6.921 0 0019 11zM4.27 3L3 4.27l6 6V11c0 1.66 1.34 3 3 3l.1-.01 2.63 2.63C13.89 16.85 12.98 17 12 17c-2.76 0-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c1.37-.2 2.61-.79 3.65-1.58l2.08 2.08 1.27-1.27L4.27 3zM12 4c-1.66 0-3 1.34-3 3v.18l6 6V7c0-1.66-1.34-3-3-3z"/></svg>
+      </button>
+
+      <!-- Camera Button -->
+      <button id="btn-vid" class="media-btn" onclick="toggleVideo(); event.stopPropagation();">
+        <svg class="icon-on" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+        <svg class="icon-off" viewBox="0 0 24 24"><path d="M21 6.5l-4 4V7c0-.55-.45-1-1-1H9.82L21 17.18V6.5zM3.27 2L2 3.27 4.73 6H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.21 0 .39-.08.54-.18l2.18 2.18 1.27-1.27L3.27 2z"/></svg>
+      </button>
+
+      <!-- Flip Camera Button -->
+      <button id="btn-flip" class="media-btn" onclick="flipCamera(); event.stopPropagation();">
+        <svg viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0020 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 004 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/></svg>
+      </button>
+    </div>
   </div>
 
   <script>
-   let localStream;
-let activeCall = null; // Tracks the current active call
-let currentFacingMode = "user"; // Tracks front vs back camera
-let isAudioMuted = false;
-let isVideoMuted = false;
+    let localStream;
+    let activeCall = null;
+    let currentFacingMode = "user";
+    let isAudioMuted = false;
+    let isVideoMuted = false;
 
-// 1. Generate 4-Digit ID
-function generate4DigitID() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
-const myId = generate4DigitID();
-const peer = new Peer(myId);
-
-// 2. Initialize Media
-async function initMedia() {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
-      audio: true
-    });
-    document.getElementById('local-video').srcObject = localStream;
-  } catch (err) {
-    console.error("Error accessing camera/mic:", err);
-  }
-}
-initMedia();
-
-// 3. Setup PeerJS Listeners
-peer.on('open', id => document.getElementById('my-id').innerText = id);
-
-peer.on('call', call => {
-  activeCall = call; // Save active call
-  call.answer(localStream);
-  call.on('stream', remoteStream => {
-    document.getElementById('remote-video').srcObject = remoteStream;
-  });
-});
-
-function makeCall() {
-  const remoteId = document.getElementById('peer-id').value;
-  if (!remoteId) return alert("Please enter a Peer ID");
-  
-  activeCall = peer.call(remoteId, localStream); // Save active call
-  activeCall.on('stream', remoteStream => {
-    document.getElementById('remote-video').srcObject = remoteStream;
-  });
-}
-
-// --- NEW MEDIA CONTROL FUNCTIONS --- //
-
-function toggleMic() {
-  if (!localStream) return;
-  const audioTrack = localStream.getAudioTracks()[0];
-  if (audioTrack) {
-    audioTrack.enabled = !audioTrack.enabled;
-    isAudioMuted = !audioTrack.enabled;
+    // 1. Generate 4-Digit ID & Initialize PeerJS
+    function generate4DigitID() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
+    }
     
-    const btn = document.getElementById('btn-mic');
-    btn.innerText = isAudioMuted ? "🔇 Mic Off" : "🎤 Mic On";
-    btn.classList.toggle('btn-danger', isAudioMuted);
-  }
-}
+    const myId = generate4DigitID();
+    const peer = new Peer(myId);
 
-function toggleVideo() {
-  if (!localStream) return;
-  const videoTrack = localStream.getVideoTracks()[0];
-  if (videoTrack) {
-    videoTrack.enabled = !videoTrack.enabled;
-    isVideoMuted = !videoTrack.enabled;
-    
-    const btn = document.getElementById('btn-vid');
-    btn.innerText = isVideoMuted ? "🚫 Cam Off" : "📷 Cam On";
-    btn.classList.toggle('btn-danger', isVideoMuted);
-  }
-}
-
-async function flipCamera() {
-  if (!localStream) return;
-  
-  // Swap facing mode
-  currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
-  
-  // Stop the old video track to release the hardware
-  const oldVideoTrack = localStream.getVideoTracks()[0];
-  if (oldVideoTrack) oldVideoTrack.stop();
-  
-  try {
-    // Request just the new video stream
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
-      audio: false
-    });
-    
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    
-    // Swap the tracks in the local stream
-    localStream.removeTrack(oldVideoTrack);
-    localStream.addTrack(newVideoTrack);
-    
-    // Maintain the user's current camera mute state
-    newVideoTrack.enabled = !isVideoMuted;
-    
-    // Update the local video preview
-    const localVideoEl = document.getElementById('local-video');
-    localVideoEl.srcObject = localStream;
-    
-    // Remove mirroring when using the back camera
-    localVideoEl.style.transform = currentFacingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
-    
-    // CRITICAL: Replace the track in the active WebRTC connection so the remote peer sees the new camera
-    if (activeCall && activeCall.peerConnection) {
-      const sender = activeCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
-      if (sender) {
-        sender.replaceTrack(newVideoTrack);
+    // 2. Initialize Camera and Microphone
+    async function initMedia() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } }, 
+          audio: true 
+        });
+        document.getElementById('local-video').srcObject = localStream;
+      } catch (err) {
+        console.error("Error accessing camera/mic:", err);
+        alert("Please grant camera and microphone permissions.");
       }
     }
-  } catch (err) {
-    console.error("Error flipping camera:", err);
-    alert("Could not switch camera. Ensure your device has multiple cameras.");
-  }
-}
+    initMedia();
 
-// Zoom Logic from previous step
-const videoContainer = document.getElementById('video-container');
-let lastTap = 0;
-videoContainer.addEventListener('click', (e) => {
-  const currentTime = new Date().getTime();
-  if (currentTime - lastTap < 300 && currentTime - lastTap > 0) {
-    videoContainer.classList.toggle('zoomed');
-    e.preventDefault();
-  }
-  lastTap = currentTime;
-});
+    // 3. Setup WebRTC Listeners
+    peer.on('open', id => {
+      document.getElementById('my-id').innerText = id;
+    });
+
+    peer.on('call', call => {
+      activeCall = call;
+      call.answer(localStream);
+      call.on('stream', remoteStream => {
+        document.getElementById('remote-video').srcObject = remoteStream;
+      });
+    });
+
+    function makeCall() {
+      const remoteId = document.getElementById('peer-id').value;
+      if (!remoteId || remoteId.length !== 4) return alert("Please enter a valid 4-digit Peer ID");
+      
+      activeCall = peer.call(remoteId, localStream);
+      activeCall.on('stream', remoteStream => {
+        document.getElementById('remote-video').srcObject = remoteStream;
+      });
+    }
+
+    // 4. Media Controls
+    function toggleMic() {
+      if (!localStream) return;
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled;
+        isAudioMuted = !audioTrack.enabled;
+        
+        // Toggle the .muted class (CSS handles the SVG swap and red color)
+        document.getElementById('btn-mic').classList.toggle('muted', isAudioMuted);
+      }
+    }
+
+    function toggleVideo() {
+      if (!localStream) return;
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.enabled = !videoTrack.enabled;
+        isVideoMuted = !videoTrack.enabled;
+        
+        // Toggle the .muted class
+        document.getElementById('btn-vid').classList.toggle('muted', isVideoMuted);
+      }
+    }
+
+    async function flipCamera() {
+      if (!localStream) return;
+      
+      currentFacingMode = currentFacingMode === "user" ? "environment" : "user";
+      const oldVideoTrack = localStream.getVideoTracks()[0];
+      if (oldVideoTrack) oldVideoTrack.stop();
+
+      try {
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: currentFacingMode, width: { ideal: 720 }, height: { ideal: 1280 } },
+          audio: false
+        });
+
+        const newVideoTrack = newStream.getVideoTracks()[0];
+        localStream.removeTrack(oldVideoTrack);
+        localStream.addTrack(newVideoTrack);
+        
+        newVideoTrack.enabled = !isVideoMuted;
+
+        const localVideoEl = document.getElementById('local-video');
+        localVideoEl.srcObject = localStream;
+        localVideoEl.style.transform = currentFacingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+
+        if (activeCall && activeCall.peerConnection) {
+          const sender = activeCall.peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender) sender.replaceTrack(newVideoTrack);
+        }
+      } catch (err) {
+        console.error("Error flipping camera:", err);
+      }
+    }
+
+    // 5. Double-Tap to Zoom
+    const videoContainer = document.getElementById('video-container');
+    let lastTap = 0;
+    
+    videoContainer.addEventListener('click', (e) => {
+      const currentTime = new Date().getTime();
+      const tapLength = currentTime - lastTap;
+      
+      if (tapLength < 300 && tapLength > 0) {
+        videoContainer.classList.toggle('zoomed');
+        e.preventDefault();
+      }
+      lastTap = currentTime;
+    });
   </script>
 </body>
 </html>
